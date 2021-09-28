@@ -1,168 +1,169 @@
-/*
-The dataset for this project is taken from the Coronavirus Pandemic (COVID-19) section from Our World in Data dataset published in 2020. 
-This Project contains sample code to explore Covid 19 dataset, investigate the numbers of total death percentage of the infected population around the world. 
-We are going to explore numbers pertaining to specific countries and continents and establish some common trends.
-Skills used: Joins, CTE's, Temp Tables, Windows Functions, Aggregate Functions, Creating Views, Converting Data Types.
+/*This project showcases a few methods of data cleaning and data transformations in SQL. 
+We explore Nashville Housing dataset taken from Kaggle.com. 
+We will explore the data cleaning methods to prepare the data set for the further analysis.
 */
-USE PortfolioProject
-GO
 
 Select *
-From CovidDeaths
-Where continent is not null 
-order by 3,4
+From PortfolioProject2.dbo.NashvilleHousing
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+-- Standardize Date Format
 
--- Select Data that we are going to be starting with
+Select saleDate
+From PortfolioProject2.dbo.NashvilleHousing
 
-Select Location, date, total_cases, new_cases, total_deaths, population
-From CovidDeaths
-Where continent is not null 
-order by 1,2
+ALTER TABLE NashvilleHousing
+Add SaleDateConverted Date;
 
--- Total Cases vs Total Deaths
--- Shows likelihood of dying if you contract covid in your country (Eg Russia)
+Update NashvilleHousing
+SET SaleDateConverted = CONVERT(Date,SaleDate)
 
-Select Location, date, total_cases,total_deaths, (total_deaths/total_cases)*100 as DeathPercentage
-From CovidDeaths
---Where location is like '%YourCountry%'
-Where location like '%Russia%'
-order by 1,2
+Select SaleDateConverted
+From PortfolioProject2.dbo.NashvilleHousing
 
--- Total Cases vs Population
--- Shows what percentage of population infected with Covid
+-------------------------------------------------------------------------------------------------------------------------------------------------
+-- Populate Property Address data
 
-Select Location, date, Population, total_cases,  (total_cases/population)*100 as PercentPopulationInfected
-From PortfolioProject..CovidDeaths
---Where location is like '%YourCountry%'
-Where location like '%Italy%'
-order by 1,2
+Select *
+From PortfolioProject2.dbo.NashvilleHousing
+--Where PropertyAddress is null
+order by ParcelID
 
--- Countries with Highest Infection Rate compared to Population
+--Self Join
+Select a.ParcelID, a.PropertyAddress, b.ParcelID, b.PropertyAddress
+From PortfolioProject2.dbo.NashvilleHousing a
+JOIN PortfolioProject2.dbo.NashvilleHousing b
+	on a.ParcelID = b.ParcelID
+	AND a.[UniqueID ] <> b.[UniqueID ]
+Where a.PropertyAddress is null
 
-Select Location, Population, MAX(total_cases) as HighestInfectionCount,  Max((total_cases/population))*100 as PercentPopulationInfected
-From PortfolioProject..CovidDeaths
---Where location like '%YourCountry%'
-Group by Location, Population
-order by PercentPopulationInfected desc
+Select a.ParcelID, a.PropertyAddress, b.ParcelID, b.PropertyAddress, ISNULL(a.PropertyAddress,b.PropertyAddress)
+From PortfolioProject2.dbo.NashvilleHousing a
+JOIN PortfolioProject2.dbo.NashvilleHousing b
+	on a.ParcelID = b.ParcelID
+	AND a.[UniqueID ] <> b.[UniqueID ]
+--Where a.PropertyAddress is null
 
+Update a
+SET PropertyAddress = ISNULL(a.PropertyAddress,b.PropertyAddress)
+From PortfolioProject2.dbo.NashvilleHousing a
+JOIN PortfolioProject2.dbo.NashvilleHousing b
+	on a.ParcelID = b.ParcelID
+	AND a.[UniqueID ] <> b.[UniqueID ]
+Where a.PropertyAddress is null
 
--- Countries with Highest Death Count per Population
+-- Breaking out Address into Individual Columns (Address, City, State)
 
-Select Location, MAX(cast(Total_deaths as int)) as TotalDeathCount
-From CovidDeaths
---Where location like '%YourCountry%'
-Where continent is not null 
-Group by Location
-order by TotalDeathCount desc
+Select PropertyAddress
+From PortfolioProject2.dbo.NashvilleHousing
 
--- BREAKING THINGS DOWN BY CONTINENT
-
--- Showing contintents with the highest death count per population
-
-Select continent, MAX(cast(Total_deaths as int)) as TotalDeathCount
-From CovidDeaths
---Where location like '%YourContry%'
-Where continent is not null 
-Group by continent
-order by TotalDeathCount desc
-
--- Alternative way 
-Select Location, MAX(cast(Total_deaths as int)) as TotalDeathCount
-From CovidDeaths
---Where location like '%YourCountry%'
-Where continent is null 
-Group by Location
-order by TotalDeathCount desc
+SELECT
+SUBSTRING(PropertyAddress, 1, CHARINDEX(',', PropertyAddress) -1 ) as Address
+, SUBSTRING(PropertyAddress, CHARINDEX(',', PropertyAddress) + 1 , LEN(PropertyAddress)) as Address
+From PortfolioProject2.dbo.NashvilleHousing
 
 
--- GLOBAL NUMBERS
---Total 
-Select SUM(new_cases) as total_cases, SUM(cast(new_deaths as int)) as total_deaths, SUM(cast(new_deaths as int))/SUM(New_Cases)*100 as DeathPercentage
-From CovidDeaths
---Where location like '%YourCountry%'
-where continent is not null 
-Order by 1,2
+ALTER TABLE NashvilleHousing
+Add PropertySplitAddress Nvarchar(255);
 
---By Date
-Select date, SUM(new_cases) as total_cases, SUM(cast(new_deaths as int)) as total_deaths, SUM(cast(new_deaths as int))/SUM(New_Cases)*100 as DeathPercentage
-From CovidDeaths
---Where location like '%YourCountry%'
-where continent is not null
-Group By date
-Order by 1,2
+Update NashvilleHousing
+SET PropertySplitAddress = SUBSTRING(PropertyAddress, 1, CHARINDEX(',', PropertyAddress) -1 )
+
+
+ALTER TABLE NashvilleHousing
+Add PropertySplitCity Nvarchar(255);
+
+Update NashvilleHousing
+SET PropertySplitCity = SUBSTRING(PropertyAddress, CHARINDEX(',', PropertyAddress) + 1 , LEN(PropertyAddress))
+
+Select *
+From PortfolioProject2.dbo.NashvilleHousing
+
+Select
+PARSENAME(REPLACE(OwnerAddress, ',', '.') , 3)
+,PARSENAME(REPLACE(OwnerAddress, ',', '.') , 2)
+,PARSENAME(REPLACE(OwnerAddress, ',', '.') , 1)
+From PortfolioProject2.dbo.NashvilleHousing
 
 
 
--- Total Population vs Vaccinations
--- Shows Percentage of Population that has recieved at least one Covid Vaccine
+ALTER TABLE NashvilleHousing
+Add OwnerSplitAddress Nvarchar(255);
 
-Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
-, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
---, (RollingPeopleVaccinated/population)*100
-From PortfolioProject..CovidDeaths dea
-Join PortfolioProject..CovidVaccinations vac
-	On dea.location = vac.location
-	and dea.date = vac.date
-where dea.continent is not null 
-order by 2,3
+Update NashvilleHousing
+SET OwnerSplitAddress = PARSENAME(REPLACE(OwnerAddress, ',', '.') , 3)
 
--- Using CTE to perform Calculation on Partition By in previous query
 
-With PopvsVac (Continent, Location, Date, Population, New_Vaccinations, RollingPeopleVaccinated)
-as
-(
-Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
-, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
---, (RollingPeopleVaccinated/population)*100
-From PortfolioProject..CovidDeaths dea
-Join PortfolioProject..CovidVaccinations vac
-	On dea.location = vac.location
-	and dea.date = vac.date
-where dea.continent is not null 
---order by 2,3
+ALTER TABLE NashvilleHousing
+Add OwnerSplitCity Nvarchar(255);
+
+Update NashvilleHousing
+SET OwnerSplitCity = PARSENAME(REPLACE(OwnerAddress, ',', '.') , 2)
+
+
+
+ALTER TABLE NashvilleHousing
+Add OwnerSplitState Nvarchar(255);
+
+Update NashvilleHousing
+SET OwnerSplitState = PARSENAME(REPLACE(OwnerAddress, ',', '.') , 1)
+
+
+Select *
+From PortfolioProject2.dbo.NashvilleHousing
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+-- Change Y and N to Yes and No in "Sold as Vacant" field
+
+Select Distinct(SoldAsVacant), Count(SoldAsVacant)
+From PortfolioProject2.dbo.NashvilleHousing
+Group by SoldAsVacant
+order by 2
+
+Select SoldAsVacant
+, CASE When SoldAsVacant = 'Y' THEN 'Yes'
+	   When SoldAsVacant = 'N' THEN 'No'
+	   ELSE SoldAsVacant
+	   END
+From PortfolioProject2.dbo.NashvilleHousing
+
+
+Update NashvilleHousing
+SET SoldAsVacant = CASE When SoldAsVacant = 'Y' THEN 'Yes'
+	   When SoldAsVacant = 'N' THEN 'No'
+	   ELSE SoldAsVacant
+	   END
+
+Select SoldAsVacant
+From PortfolioProject2.dbo.NashvilleHousing
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+-- Remove Duplicates
+
+WITH RowNumCTE AS(
+Select *,
+	ROW_NUMBER() OVER (
+	PARTITION BY ParcelID,
+				 PropertyAddress,
+				 SalePrice,
+				 SaleDate,
+				 LegalReference
+				 ORDER BY
+					UniqueID
+					) row_num
+					From PortfolioProject2.dbo.NashvilleHousing
 )
-Select *, (RollingPeopleVaccinated/Population)*100
-From PopvsVac
+Delete
+From RowNumCTE
+Where row_num > 1
 
--- Using Temp Table to perform Calculation on Partition By in previous query
+------------------------------------------------------------------------------------------------------------------------------------------------------
 
-DROP Table if exists #PercentPopulationVaccinated
-Create Table #PercentPopulationVaccinated
-(
-Continent nvarchar(255),
-Location nvarchar(255),
-Date datetime,
-Population numeric,
-New_vaccinations numeric,
-RollingPeopleVaccinated numeric
-)
+-- Delete Unused Columns
 
-Insert into #PercentPopulationVaccinated
-Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
-, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
---, (RollingPeopleVaccinated/population)*100
-From PortfolioProject..CovidDeaths dea
-Join PortfolioProject..CovidVaccinations vac
-	On dea.location = vac.location
-	and dea.date = vac.date
---where dea.continent is not null 
---order by 2,3
-
-Select *, (RollingPeopleVaccinated/Population)*100
-From #PercentPopulationVaccinated
-
--- Creating View to store data for later visualizations
-
-Create View PercentPopulationVaccinated as
-Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
-, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
---, (RollingPeopleVaccinated/population)*100
-From PortfolioProject..CovidDeaths dea
-Join PortfolioProject..CovidVaccinations vac
-	On dea.location = vac.location
-	and dea.date = vac.date
-where dea.continent is not null 
+Select *
+From PortfolioProject2.dbo.NashvilleHousing
 
 
-SELECT *
-FROM PercentPopulationVaccinated
+ALTER TABLE PortfolioProject2.dbo.NashvilleHousing
+DROP COLUMN OwnerAddress, TaxDistrict, PropertyAddress, SaleDate
